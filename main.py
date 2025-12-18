@@ -68,3 +68,48 @@ if __name__ == "__main__":
     # تشغيل البوت
     asyncio.run(main())
           
+from games import game_manager
+
+def setup_games_commands(bot):
+    """إعداد أوامر الألعاب"""
+    
+    @bot.command('الالعاب')
+    async def games_list(update: Update, context: CallbackContext):
+        """عرض قائمة الألعاب"""
+        games = game_manager.list_games()
+        response = "🎮 قائمة الألعاب المتاحة:\n\n"
+        response += "\n".join(
+            f"{i+1}. {game['name']} - {game['desc']} (/{game['id']})"
+            for i, game in enumerate(games)
+        )
+        await update.message.reply_text(response)
+    
+    @bot.command('xo')
+    async def start_xo_game(update: Update, context: CallbackContext):
+        """بدء لعبة XO"""
+        chat_id = update.message.chat.id
+        user_id = update.message.from_user.id
+        
+        # إذا تم ذكر لاعب آخر
+        opponent_id = None
+        if context.args and context.args[0].startswith('@'):
+            opponent_username = context.args[0][1:]
+            # هنا يجب البحث عن معرف اللاعب الثاني حسب اليوزرنيم
+            
+        game = game_manager.get_game('xo')
+        result = game.start_game(chat_id, user_id, opponent_id)
+        
+        if 'error' in result:
+            await update.message.reply_text(f"❌ {result['error']}")
+            return
+        
+        # عرض لوحة اللعبة
+        board = "\n".join(" | ".join(cell if cell else "⬜" for cell in row) for row in result['board'])
+        await update.message.reply_text(
+            f"🎮 بدأت لعبة XO!\n\n{board}\n\n{result['message']}",
+            reply_markup=XOGameKeyboard(result['game_id'])
+        )
+    
+    # إضافة أوامر للألعاب الأخرى بنفس الطريقة
+    # ...
+    
