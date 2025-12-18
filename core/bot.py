@@ -1,75 +1,93 @@
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackQueryHandler
-from telegram import Update
-from typing import Dict, List, Callable
-import logging
-import asyncio
+#!/usr/bin/env python3
+"""
+🤖 البوت الرئيسي - الإصدار المتكامل
+يجمع جميع الأوامر: إعدادات المجموعة، الحماية، الألعاب، والأوامر الإضافية
+"""
 
-class AdvancedBot:
+import logging
+from telegram import Update
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    Filters,
+    CallbackQueryHandler,
+)
+from activation_system import ActivationSystem
+from group_settings_manager import GroupSettingsManager
+from other_commands import OtherCommands
+from protection_manager import ProtectionManager
+from games.activation_system import GamesManager  # إذا كان لديك ملف ألعاب منفصل
+
+# إعداد التسجيل
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+class BotManager:
+    """مدير البوت الرئيسي"""
+    
     def __init__(self, token: str):
-        self.updater = Updater(token, use_context=True)
-        self.dispatcher = self.updater.dispatcher
-        self.handlers: Dict[str, List[Callable]] = {}
-        self.setup_logging()
+        self.token = token
+        self.application = ApplicationBuilder().token(self.token).build()
         
-    def setup_logging(self):
-        """إعداد نظام التسجيل المتقدم"""
-        logging.basicConfig(
-            format='🎯 %(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            level=logging.INFO,
-            handlers=[
-                logging.FileHandler('bot_analytics.log', encoding='utf-8'),
-                logging.StreamHandler()
-            ]
-        )
-        self.logger = logging.getLogger(__name__)
+        # تهيئة الأنظمة الفرعية
+        self.activation_system = ActivationSystem()
+        self.group_settings = GroupSettingsManager()
+        self.other_commands = OtherCommands()
+        self.protection_manager = ProtectionManager()
+        self.games_manager = GamesManager()  # إذا كان لديك نظام ألعاب منفصل
+        self._setup_handlers()
+    
+    def _setup_handlers(self):
+        """إعداد جميع المعالجات"""
         
-    def register_handler(self, handler_type: str, handler: Callable, *args, **kwargs):
-        """تسجيل المعالجات بطريقة ذكية"""
-        if handler_type == 'command':
-            self.dispatcher.add_handler(CommandHandler(*args, **kwargs))
-        elif handler_type == 'message':
-            self.dispatcher.add_handler(MessageHandler(*args, **kwargs))
-        elif handler_type == 'callback':
-            self.dispatcher.add_handler(CallbackQueryHandler(*args, **kwargs))
-            
-    def smart_error_handler(self, update: Update, context):
-        """معالجة الأخطاء الذكية"""
-        error_msg = str(context.error)
-        self.logger.error(f"🚨 خطأ: {error_msg}")
+        # أوامر التفعيل والتعطيل
+        self.activation_system.setup_commands(self.application)
         
-        # إرسال رسالة خطأ مناسبة للمستخدم
-        if "Not enough rights" in error_msg:
-            context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="⚠️ ليس لدي الصلاحيات الكافية لهذا الإجراء!"
-            )
-        elif "Message to delete not found" in error_msg:
-            pass  # تجاهل الخطأ الشائع
-        else:
-            context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="❌ حدث خطأ غير متوقع، جاري إصلاحه..."
-            )
+        # إعدادات المجموعة
+        self.group_settings.setup_group_settings_commands(self.application)
+        
+        # الأوامر الإضافية
+        self.other_commands.setup_commands(self.application)
+        
+        # نظام الحماية
+        self.protection_manager.setup_protection_commands(self.application)
+        
+        # نظام الألعاب
+        self.games_manager.setup_game_commands(self.application)
+        
+        # معالجة الرسائل العامة
+        self.application.add_handler(MessageHandler(Filters.text, self.handle_message))
+        self.application.add_handler(MessageHandler(Filters.status_update.new_chat_members, self.welcome_new_members))
+        self.application.add_handler(CallbackQueryHandler(self.handle_callback))
+    
+    async def handle_message(self, update: Update, context: CallbackContext):
+        """معالجة الرسائل العامة"""
+        # يمكنك إضافة منطق إضافي هنا
+        pass
+    
+    async def welcome_new_members(self, update: Update, context: CallbackContext):
+        """ترحيب بالأعضاء الجدد"""
+        await self.group_settings.welcome_member(update, context)
+    
+    async def handle_callback(self, update: Update, context: CallbackContext):
+        """معالجة استدعاءات الأزرار"""
+        # يمكنك إضافة منطق إضافي هنا
+        pass
     
     def start(self):
-        """بدء تشغيل البوت بشكل آمن"""
-        try:
-            self.logger.info("🚀 بدء تشغيل البوت المتقدم...")
-            self.updater.start_polling(
-                drop_pending_updates=True,
-                allowed_updates=['message', 'callback_query']
-            )
-            self.updater.idle()
-        except Exception as e:
-            self.logger.critical(f"💥 فشل تشغيل البوت: {e}")
-            raise
+        """بدء تشغيل البوت"""
+        logger.info("🤖 بدء تشغيل البوت...")
+        self.application.run_polling()
 
-# إنشاء كائن البوت العالمي
-from core.database import DatabaseManager
-db = DatabaseManager()
-bot_instance = None
-
-def create_bot(token: str):
-    global bot_instance
-    bot_instance = AdvancedBot(token)
-    return bot_instance
+# دالة التشغيل الرئيسية
+if __name__ == "__main__":
+    # توكن البوت - يُفضل قراءته من ملف بيئة بدلاً من الكود مباشرة
+    BOT_TOKEN = "8257887627:AAEZ2I9Q97ma1C07Hp1bKNHLibIVsrQLCxc"
+    
+    # إنشاء وإدارة البوت
+    bot = BotManager(BOT_TOKEN)
+    bot.start()
